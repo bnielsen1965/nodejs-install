@@ -4,11 +4,12 @@
 # copyrights. Everyone is free to use, modify, republish, sell or give away this
 # work without prior consent from anybody.
 #
-# This documentation is provided on an “as is” basis, without warranty of any kind.
-# Use at your own risk! Under no circumstances shall the author(s) or contributor(s)
-# be liable for damages resulting directly or indirectly from the use or non-use
-# of this documentation.
-#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+# INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
+# PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHOR(S) OR CONTRIBUTOR(S)
+# BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+# TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR
+# THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 # default parameters
 NODE_DIST_WEB_PATH="https://nodejs.org/dist"
