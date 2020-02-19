@@ -11,8 +11,13 @@
 # TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR
 # THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+# Bryan Nielsen (2019, 2020)
+# https://github.com/bnielsen1965
+
 # default parameters
 NODE_DIST_WEB_PATH="https://nodejs.org/dist"
+NODE_UNOFFICIAL_WEB_PATH="https://unofficial-builds.nodejs.org/download/release"
+NODE_SELECTED_WEB_PATH=""
 INSTALL_PATH="/usr/lib/nodejs"
 BIN_PATH="/usr/bin"
 USER_COMMAND="install" # default command to run
@@ -24,17 +29,17 @@ PACKAGE=`basename $0`
 function Usage()
 {
 cat <<-ENDOFMESSAGE
-$PACKAGE - Install a specific nodejs version from ${NODE_DIST_WEB_PATH}.
-  Run as root to install or uninstall specific versions of nodejs.
+$PACKAGE - Install a specific nodejs version from ${NODE_DIST_WEB_PATH} or optionally ${NODE_UNOFFICIAL_WEB_PATH}.
+  Run as root to install, uninstall or switch to a specific versions of nodejs.
 
 $PACKAGE [command] [options]
   arguments:
   command - the command to execute, i|install (default), u|uninstall
 
   options:
-  -h, --help show brief help
-  -v, --version NODE_VERSION the version to install, i.e. 4.4.7
-NOTE: This command must be executed as root. The command will fail if the nodejs package is installed.
+  -h, --help  Show brief help.
+  -u, --unofficial  Use the unofficial build releases.
+  -v, --version NODE_VERSION  Specify the version to install, i.e. 4.4.7
 ENDOFMESSAGE
   exit
 }
@@ -43,24 +48,30 @@ ENDOFMESSAGE
 # die with message
 function Die()
 {
-  echo "$* Use -h option to display help."
+  echo "$*" >&2
+  echo "Use -h option to display help." >&2
   exit 1
 }
 
 
 # process command line arguments into values to use
 function ProcessArguments() {
+  NODE_SELECTED_WEB_PATH="$NODE_DIST_WEB_PATH"
+
   # separate options from arguments
   while [ $# -gt 0 ]
   do
     opt=$1
     shift
     case ${opt} in
+      -u|--unofficial)
+      NODE_SELECTED_WEB_PATH="$NODE_UNOFFICIAL_WEB_PATH"
+      ;;
       -v|--version)
       if [ $# -eq 0 -o "${1:0:1}" = "-" ]; then
         Die "The ${opt} option requires an version number, i.e. -v 4.4.7."
       fi
-      export NODE_VERSION="v$1"
+      export NODE_VERSION="$1"
       shift
       ;;
       -h|--help)
@@ -83,24 +94,31 @@ function ProcessArguments() {
 function VersionAvailable()
 {
   # Arguments: platform architecture
+  local searchVersion="$1"
+  local searchArch="$2"
   local filename=""
   local version=""
   local platform=""
   local architecture=""
-  local content=$(wget $NODE_WEB_PATH -q -O -)
   local regex="node-v([0-9]+\.[0-9]+\.[0-9]+)-([^-]+)-([^.]+)\."
+  local content=$(wget $NODE_WEB_PATH -q -O -)
+  local wgetreturn=$?
+  if [[ $wgetreturn -ne 0 ]]; then
+    Die "Failed to wget available versions from $NODE_WEB_PATH"
+  fi
   while read -r line; do
     if [[ $line =~ $regex ]]; then
-      if [ "$1" == "${BASH_REMATCH[2]}" ] && [ "$2" == "${BASH_REMATCH[3]}" ]; then
-      filename="$line"
-      version="${BASH_REMATCH[1]}"
-      platform="${BASH_REMATCH[2]}"
-      architecture="${BASH_REMATCH[3]}"
+      # check line for match with search parameters
+      if [ "$searchVersion" == "${BASH_REMATCH[2]}" ] && [ "$searchArch" == "${BASH_REMATCH[3]}" ]; then
+        filename="$line"
+        version="${BASH_REMATCH[1]}"
+        platform="${BASH_REMATCH[2]}"
+        architecture="${BASH_REMATCH[3]}"
       fi
     fi
   done < <(echo "$content" | grep -o "node-v[^>]*\.gz")
-  if [ -z "$filename" ]; then
-    Die "Failed to locate a version at $NODE_WEB_PATH for $NODE_PLATFORM $NODE_ARCHITECTURE. Try specifying a different version."
+  if [[ -z "$filename" ]]; then
+    Die "Failed to locate a version at $NODE_WEB_PATH for $NODE_PLATFORM $NODE_ARCHITECTURE."
   fi
   echo "$filename $version $platform $architecture"
 }
@@ -163,7 +181,7 @@ function PackageArchitecture()
 # build environment
 function BuildEnvironment()
 {
-  export NODE_WEB_PATH="${NODE_DIST_WEB_PATH}/${NODE_VERSION}/"
+  export NODE_WEB_PATH="${NODE_SELECTED_WEB_PATH}/v${NODE_VERSION}/"
   export NODE_ARCHITECTURE="$(PackageArchitecture)"
   export NODE_PLATFORM="linux" # TODO dynamically determine os type
 }
@@ -177,50 +195,10 @@ function IsRoot() {
 }
 
 
-# install nodejs
-function InstallNodeJS()
-{
-  IsRoot
-
-  # get version details in array (filename version platform architecture)
-  local version=($(VersionAvailable "$NODE_PLATFORM" "$NODE_ARCHITECTURE"))
-  local node_version="${version[1]}" # may differ if search was in "latest"
-  local node_file="${version[0]}"
-  local node_install_dir="node-v${node_version}-${NODE_PLATFORM}-${NODE_ARCHITECTURE}"
-  local node_download_path="${NODE_DIST_WEB_PATH}/${NODE_VERSION}/${node_file}"
-
-  mkdir -p "$INSTALL_PATH"
-  cd $INSTALL_PATH
-
-  # get node package if not installed
-  if [ ! -d $node_install_dir ]; then
-    echo "$node_download_path"
-    wget "$node_download_path" -O "$node_file"
-
-    # extract
-    tar xf "$node_file"
-
-    # remove tar
-    rm -f "$node_file"
-  fi
-  
-  InstallAlternative "$INSTALL_PATH/$node_install_dir" "$node_version" || InstallSymlink "$INSTALL_PATH/$node_install_dir"
-
-  echo "Install complete."
-}
-
-
-# install in alternatives
-function InstallAlternative()
-{
-  command -v update-alternativesxx
+# check if system uses alternatives
+function UsingAlternatives() {
+  command -v update-alternatives
   if [ $? -eq 0 ]; then
-    local node_install_path=$1;
-    local node_version=$2
-    # install alternatives
-    local priority=`echo $node_version | sed 's/[\.v]//g'`
-    update-alternatives --install /usr/bin/node node "$node_install_path/bin/node" "$priority"
-    update-alternatives --install /usr/bin/npm npm "$node_install_path/bin/npm" "${priority}"
     true
   else
     false
@@ -228,12 +206,68 @@ function InstallAlternative()
 }
 
 
+# install nodejs
+function InstallNodeJS()
+{
+  IsRoot
+  # get version details in array (filename version platform architecture)
+  local version=($(VersionAvailable "$NODE_PLATFORM" "$NODE_ARCHITECTURE"))
+  if [[ -z "$version" ]]; then exit 1; fi
+  local node_version="${version[1]}" # may differ if search was in "latest"
+  local node_file="${version[0]}"
+  local node_install_dir=$(VersionPath $node_version)
+  local node_download_path="${NODE_SELECTED_WEB_PATH}/v${NODE_VERSION}/${node_file}"
+
+  mkdir -p "$INSTALL_PATH"
+  cd $INSTALL_PATH
+
+  # get node package if not installed
+  if [ ! -d $node_install_dir ]; then
+    wget "$node_download_path" -O "$node_file"
+    local wgetreturn=$?
+    if [[ $wgetreturn -ne 0 ]]; then
+      Die "Download $node_download_path failed"
+    fi
+    # extract
+    tar xf "$node_file"
+    # remove tar
+    rm -f "$node_file"
+  fi
+  if [ $(UsingAlternatives) ]; then
+    InstallAlternatives "$INSTALL_PATH/$node_install_dir" "$node_version"
+  else
+    InstallSymlinks "$INSTALL_PATH/$node_install_dir"
+  fi
+  echo "Install complete."
+}
+
+
+# install in alternatives
+function InstallAlternatives()
+{
+  local node_install_path=$1;
+  local node_version=$2
+  local priority=`echo $node_version | sed 's/[\.v]//g'`
+  update-alternatives --install /usr/bin/node node "$node_install_path/bin/node" "$priority"
+  update-alternatives --set node "$node_install_path/bin/node"
+  update-alternatives --install /usr/bin/npm npm "$node_install_path/bin/npm" "${priority}"
+  update-alternatives --set npm "$node_install_path/bin/npm"
+  if [ -f "$node_install_path/bin/npx" ]; then
+    update-alternatives --install /usr/bin/npx npx "$node_install_path/bin/npx" "${priority}"
+    update-alternatives --set npx "$node_install_path/bin/npx"
+  fi
+}
+
+
 # install as symlink
-function InstallSymlink()
+function InstallSymlinks()
 {
   local node_install_path=$1;
   ln -sf "$node_install_path/bin/node" "$BIN_PATH/node"
   ln -sf "$node_install_path/bin/npm" "$BIN_PATH/npm"
+  if [ -f "$node_install_path/bin/npx" ]; then
+    ln -sf "$node_install_path/bin/npx" "$BIN_PATH/npx"
+  fi
 }
 
 
@@ -241,17 +275,17 @@ function InstallSymlink()
 function UninstallNodeJS()
 {
   IsRoot
-
   cd $INSTALL_PATH
-  local node_install_dir="node-${NODE_VERSION}-${NODE_PLATFORM}-${NODE_ARCHITECTURE}"
+  local node_install_dir=$(VersionPath $NODE_VERSION)
   local node_install_path="$INSTALL_PATH/$node_install_dir"
   if [ ! -d "$node_install_path" ]; then Die "This version of nodejs is not installed. ($node_install_path)"; fi
-
-  RemoveAlternative "$node_install_path" || UpdateSymlink "$node_install_path"
-
-  # remove install
-  rm -r ${node_install_path};
-
+  if [ $(UsingAlternatives) ]; then
+    RemoveAlternative "$node_install_path"
+    rm -r ${node_install_path}
+  else
+    rm -r ${node_install_path}
+    RemoveSymlinks
+  fi
   echo "Uninstall complete."
 }
 
@@ -259,11 +293,13 @@ function UninstallNodeJS()
 # remove from alternatives
 function RemoveAlternative()
 {
-  command -v update-alternativesxx
-  if [ $? -eq 0 ]; then
+  if [ $(UsingAlternatives) ]; then
     local node_install_path=$1
     update-alternatives --remove node "$node_install_path/bin/node"
     update-alternatives --remove npm "$node_install_path/bin/npm"
+    if [ -f "$node_install_path/bin/npx" ]; then
+      update-alternatives --remove npx "$node_install_path/bin/npx"
+    fi
     true
   else
     false
@@ -275,25 +311,33 @@ function RemoveAlternative()
 function UpdateSymlink()
 {
   local latest=$(LatestInstalledVersion)
-  if [ -z latest ]; then
-    local node_install_path=$1;
-    rm -f "$BIN_PATH/node"
-    rm -f "$BIN_PATH/npm"
-  else
-    local node_install_dir="node-v${latest}-${NODE_PLATFORM}-${NODE_ARCHITECTURE}"
+  if [ -n "$latest" ]; then
+    local node_install_dir=$(VersionPath $latest)
     local node_install_path="$INSTALL_PATH/$node_install_dir"
-    InstallSymlink "$node_install_path"
+    InstallSymlinks "$node_install_path"
   fi
 }
 
 
-# install as symlink
-function RemoveSymlink()
+# remove symlinks
+function RemoveSymlinks()
 {
-  local node_install_path=$1;
-  ln -sf "$BIN_PATH/node" "$node_install_path/bin/node"
-  ln -sf "$BIN_PATH/npm" "$node_install_path/bin/npm"
+  rm -f "$BIN_PATH/node"
+  rm -f "$BIN_PATH/npm"
+  rm -f "$BIN_PATH/npx"
+  $(command -v node)
+  if [ $? -ne 0 ]; then
+    UpdateSymlink
+  fi
 }
+
+
+# convert version string to version path string
+function VersionPath()
+{
+  echo "node-v${1}-${NODE_PLATFORM}-${NODE_ARCHITECTURE}"
+}
+
 
 
 # prepare to execute command
