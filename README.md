@@ -63,3 +63,14 @@ Use the uninstall command to remove a specific version of NodeJS.
 The configuration of alternatives or symlinks will attempt to switch to the latest
 installed version or if no installed versions remain then the alternatives or symlinks
 will be removed.
+
+
+## unofficial builds
+
+Some platforms may not have an offcial build, I.E. the armv6l CPU on the Raspberry Pi Zero
+does not have an official nodejs build. If a platform is supported by the unofficial builds
+project then nodejs can be installed by using the -u flag.
+
+> sudo ./nodejs-install.sh install -v 14.15.1 -u
+
+This will search the unoffical builds download site and install the package if found.
