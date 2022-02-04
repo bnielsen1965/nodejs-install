@@ -11,7 +11,7 @@
 # TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR
 # THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-# Bryan Nielsen (2019, 2020)
+# Bryan Nielsen (2019, 2020, 2022)
 # https://github.com/bnielsen1965
 
 # default parameters
@@ -173,6 +173,7 @@ function PackageArchitecture()
   local arch=$(arch)
   echo $(case "$arch" in
     x86_64) echo "x64";;
+    aarch64) echo "arm64";;
     *) echo "$arch";;
   esac)
 }
